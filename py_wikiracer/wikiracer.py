@@ -7,14 +7,6 @@ import heapq as heap
 
 class Parser:
 
-    # def getLinks(page):
-    #     match = 'href="/wiki/[A-Z]+[^:\s]+."'
-    #     links = re.findall(match, page)
-    #     prefix = 'href="/wiki/'
-    #     for i in range(0, len(links)):
-    #         links[i] = links[i][len(prefix):len(links[i]) - 1]
-    #     return links
-
     @staticmethod
     def get_links_in_page(html: str) -> List[str]:
         """
@@ -24,9 +16,10 @@ class Parser:
         """
         links = []
         disallowed = Internet.DISALLOWED
-        # disallowed
-        links = re.findall('href="/wiki/[^?#:/\s]+"', html)
         disallowed_str = ''.join(disallowed)
+        # links = re.findall('href="/wiki/[^?#:/\s]+"', html)
+        links = re.findall('href="/wiki/[^'+disallowed_str+'\s]+"', html)
+
         prefix = 'href="/wiki/'
         href_str = 'href="'
         new_lst = []
@@ -70,7 +63,6 @@ class BFSProblem:
     def bfs(self, source="/wiki/Calvin_Li", goal="/wiki/Wikipedia"):
 
         # YOUR CODE HERE
-        found = False
         path = [source]
 
         if source == goal:
@@ -81,10 +73,8 @@ class BFSProblem:
         self.queue.append((source, [source]))
         while self.queue:
             page, shortest_path = self.queue.pop(0)
-            # print(page, end=" ")
             html = self.internet.get_page(page)
             links = Parser.get_links_in_page(html)
-            # print(links)
             for link in links:
                 if link == goal:
                     self.visited.append(goal)
@@ -188,6 +178,7 @@ class WikiracerProblem:
         self.internet = Internet()
         self.visited = set()
         self.matched = []
+        self.matched_word = []
         # self.visited = []
         # self.shortest_path = []
         # self.queue = []
@@ -291,7 +282,7 @@ class WikiracerProblem:
             return 2000
 
         if link in self.low_priority and link in no_prefix_g_links:
-            return 3
+            return 5
         elif link in no_prefix_g_links:
             return 0
         elif link in self.low_priority:
@@ -306,7 +297,7 @@ class WikiracerProblem:
                 if cost:
                     return cost
 
-        return len(link) * ord(link[0])
+        return len(link)
 
 
     def split_links(self,link, no_prefix_g_links, seperator):
@@ -314,19 +305,21 @@ class WikiracerProblem:
 
         for w in range(1, len(words) - 1):
             if seperator.join(words[w:]) in no_prefix_g_links:
-                if link in self.matched:
+                if link in self.matched or w in self.matched_word:
                     return 1005
                 else:
                     self.matched.append(link)
-                    return 5
+                    self.matched_word.append(w)
+                    return 3
 
         for w in range(len(words) - 1, 0, -1):
             if seperator.join(words[:w]) in no_prefix_g_links:
-                if link in self.matched:
+                if link in self.matched or w in self.matched_word:
                     return 1005
                 else:
                     self.matched.append(link)
-                    return 5
+                    self.matched_word.append(w)
+                    return 3
 
         return None
 
@@ -457,47 +450,82 @@ class WikiracerProblem:
 class FindInPageProblem:
     def __init__(self):
         self.internet = Internet()
-        self.visited = []
+        self.visited = set()
 
     # This Karma problem is a little different. In this, we give you a source page, and then ask you to make up some heuristics that will allow you to efficiently
     #  find a page containing all of the words in `query`. Again, optimize for the fewest number of internet downloads, not for the shortest path.
 
     def find_in_page(self, source="/wiki/Calvin_Li", query=["ham", "cheese"]):
 
-        path = []
+        path = self.dijkstras_karma(source, query)
+        return path
 
-        stack = []
-        stack.append(source)
-
-        while len(stack) > 0:
-            found_lst = []
-            top = stack.pop()
-            self.visited.append(top)
-            path.append(top)
-            html = self.internet.get_page(top)
-            links = Parser.get_links_in_page(html)
-            for word in query:
-                if re.search(r"\b" + re.escape(word) + r"\b", html):
-                    found_lst.append(word)
-
-                if word in links:
-                    stack.append(link)
+    def searchQuery(self, query, html):
+        found_lst = []
+        for word in query:
+            if re.search(r"\b" + re.escape(word.lower()) + r"\b", html.lower()):
+                found_lst.append(word)
 
             if len(found_lst) == len(query):
-                return path
-            #             else:
-            #                 path.pop()
+                return True
+        return False
 
-            if len(stack) == 0:
-                for link in links:
-                    if link not in self.visited:
-                        stack.append(link)
-                        break
+    def dijkstras_karma(self, source, query):
+
+        pq = []
+        nodeCosts = defaultdict(lambda: float('inf'))
+        nodeCosts[source] = 0
+        heap.heappush(pq, (0, source, [source]))
+        while pq:
+            _, current, shortest_path = heap.heappop(pq)
+
+            html = self.internet.get_page(current)
+            links = Parser.get_links_in_page(html)
+
+            if self.searchQuery(query, html):
+                return shortest_path
+
+            self.visited.add(current)
+
+            for word in query:
+                for neighbour in links:
+                    weight = self.queryCostFun(word, neighbour)
+                    if neighbour in self.visited:
+                        continue
+
+                    newCost = nodeCosts[current] + weight
+
+                    if self.searchQuery(query, html):
+                        return shortest_path
+
+                    if nodeCosts[neighbour] is None or nodeCosts[neighbour] > newCost:
+                        nodeCosts[neighbour] = newCost
+                        heap.heappush(pq, (newCost, neighbour, shortest_path + [neighbour]))
+
         return None
 
+    def queryCostFun(self, word, link):
+        maxLen = self.longestCommonSubstring(word, link, len(word), len(link))
+        return len(word) - maxLen
 
-        # find a path to a page that contains ALL of the words in query in any place within the page
-        # path[-1] should be the page that fulfills the query.
-        # YOUR CODE HERE
+    def longestCommonSubstring(self, source, target, slen, tlen):
 
-        return path  # if no path exists, return None
+        LCSuff = [[0 for k in range(tlen + 1)] for l in range(slen + 1)]
+        result = 0
+        for i in range(slen + 1):
+            for j in range(tlen + 1):
+                if (i == 0 or j == 0):
+                    LCSuff[i][j] = 0
+                elif (source[i - 1] == target[j - 1]):
+                    LCSuff[i][j] = LCSuff[i - 1][j - 1] + 1
+                    result = max(result, LCSuff[i][j])
+                else:
+                    LCSuff[i][j] = 0
+        return result
+
+
+    # find a path to a page that contains ALL of the words in query in any place within the page
+    # path[-1] should be the page that fulfills the query.
+    # YOUR CODE HERE
+
+    # return path  # if no path exists, return None

@@ -1,0 +1,24 @@
+Query based search implementation
+=====================================
+
+Approach :
+    Dijkstras algorithm with Cost function
+
+Cost Function:
+    Find longest common substring for each word from query list with in list of links from source page.
+    Then substract length of the word with the length of longest common matching substring, that would be the cost.
+
+Steps
+------
+1. Create a priority queue and insert source with zero cost.
+2. Start iterating over priority queue
+    i. pop first element and fetch html page
+    ii. Validate if all words present on the html page using regex
+       If yes then return path, else fetch all links and go to step 3
+3. Add current visiting link into visited list
+4. Loop over query list
+   i. Loop over links retrieved from step2
+      a. Find the cost of the word using cost funtion
+      b. If link's cost is greater than new cost then update the cost and push link and it cost in the heap
+        else continue
+
